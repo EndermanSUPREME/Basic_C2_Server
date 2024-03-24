@@ -23,3 +23,8 @@ are on the way!
 
 ## Demo
 https://github.com/EndermanSUPREME/Basic_C2_Server/assets/67215373/b70b076f-fa6d-4897-8e36-1852f2f8bbe7
+
+## Usage
+To compile this into an executable I used:
+`clang++ -g -Werror -W -Wunused -Wuninitialized -Wshadow -std=c++17 C2.cpp -o server.out`
+after compiling to run it is a simple `./server.out` and you're ready to go!
