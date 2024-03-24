@@ -22,11 +22,6 @@
 #include <sys/time.h> // for the struct timeval
 #include <netinet/tcp.h> // for TCP_NODELAY
 
-/*
-    Connected Devices will hold general data including:
-    IP, PORT, DEVICE_NAME, OS, SHELL_USER
-*/
-
 // global server variables
 
 struct sockaddr_in server_address;
