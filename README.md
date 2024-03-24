@@ -20,3 +20,6 @@ This C2 Server can:
 There are still some small bugs that are being investigated
 through testing the program operates as promised, but patches
 are on the way!
+
+## Demo
+https://github.com/EndermanSUPREME/Basic_C2_Server/assets/67215373/b70b076f-fa6d-4897-8e36-1852f2f8bbe7
