@@ -26,6 +26,15 @@ To compile this into an executable I used:
 `clang++ -g -Werror -W -Wunused -Wuninitialized -Wshadow -std=c++17 C2.cpp -o server.out`
 after compiling to run it is a simple `./server.out` and you're ready to go!
 
+There is also a bash script `build.sh` that you can use to also compile this program!
+```bash
+# Made build.sh an executable & run it
+chmod +x build.sh
+./build.sh
+
+# If build is successful it will prompt about running the c2 compiled program!
+```
+
 ## Patches
 * Adjusted nc shell output
 * Fixed logic errors with shell script file output / executable creation
