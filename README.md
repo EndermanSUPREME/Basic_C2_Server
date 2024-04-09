@@ -19,7 +19,7 @@ through testing the program operates as promised, but patches
 are on the way!
 
 ## Demo
-https://github.com/EndermanSUPREME/Basic_C2_Server/showcase.mp4
+https://github.com/EndermanSUPREME/Basic_C2_Server/assets/67215373/9bea9496-7404-4ab7-8042-d9d58a585225
 
 ## Usage
 To compile this into an executable I used:
