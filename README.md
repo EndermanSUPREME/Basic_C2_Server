@@ -1,5 +1,6 @@
 # Basic_C2_Server
 This is a small side project using only C++ to build a basic functional Command &amp; Control Server
+**NOTE** this projects binary works only on LINUX (tested on kali-linux-2023.4-amd64)
 
 ## Functions
 This C2 Server can:
